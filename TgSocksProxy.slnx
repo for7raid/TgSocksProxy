@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="TgConsoleTest/TgConsoleTest.csproj" />
+  <Project Path="TgSocksProxy/TgSocksProxy.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="TgSocksProxyLib/TgSocksProxyLib.csproj" />
+</Solution>

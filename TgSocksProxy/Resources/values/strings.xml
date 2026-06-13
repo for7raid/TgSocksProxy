@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">TgSocksProxy</string>
+    <string name="app_text">Hello, Android!</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="status_running">● Running on 127.0.0.1:10180</string>
+    <string name="status_stopped">○ Stopped</string>
+    <string name="log_header">Logs:</string>
+</resources>

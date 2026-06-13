@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <!-- Arrow pointing up-right: proxy traffic direction -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M16.01,7.99 L16.01,11 L14.01,11 L14.01,7.99 L10.99,7.99 L14.99,3.99 L18.99,7.99 Z" />
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M12,8 L12,20 L10,20 L10,8 L7,8 L12,3 L17,8 Z"
+      android:strokeWidth="0" />
+</vector>
