@@ -82,7 +82,7 @@ public class SocksProxyService : Service
         }
 
 
-       
+
         var socksCredentials = settings.SocksLogin is not null
             ? new ProxyCredentials(settings.SocksLogin, settings.SocksPassword ?? "")
             : null;
@@ -104,8 +104,8 @@ public class SocksProxyService : Service
         });
 
         // События из фонового потока — переключаем на главный поток через Handler
-        _proxy.ClientConnected += _ => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
-        _proxy.ClientDisconnected += _ => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
+        _proxy.ClientConnected += (s, e) => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
+        _proxy.ClientDisconnected += (s, e) => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
 
         _proxy.Start();
         IsRunning = true;
@@ -141,20 +141,23 @@ public class SocksProxyService : Service
 
         var count = _proxy?.ConnectionCount ?? 0;
         var primaryUpstream = _proxy?.Options?.UpstreamProxyEndPoint;
-        var textBitmap = CreateTextBitmap($"{count}T", Color.Transparent.ToArgb(), Color.White.ToArgb(), 56);
+        var textBitmap = CreateTextBitmap($"{count}↕", Color.Transparent.ToArgb(), Color.White.ToArgb(), 60);
 
         var icon = Icon.CreateWithBitmap(textBitmap);
 
         return new Notification.Builder(this, ChannelId)
-            .SetContentTitle("Socks5 Proxy")
-            .SetContentText($"Сервер {primaryUpstream?.Host}:{primaryUpstream?.Port}")
+            .SetContentTitle($"Сервер {primaryUpstream?.Host}:{primaryUpstream?.Port}")
+            .SetContentText($"↑{FormatSize(_proxy?.UploadBytes ?? 0)}\t\t↓{FormatSize(_proxy?.DownloadBytes ?? 0)}")
             .SetSubText($"{count} соединений")
             .SetSmallIcon(icon)
             .SetContentIntent(pendingIntent)
             .SetOngoing(true)
             .Build();
     }
-
+    private static string FormatSize(ulong bytes) =>
+        bytes < 1024 ? $"{bytes} B" :
+        bytes < 1048576 ? $"{bytes / 1024.0:F1} KB" :
+        $"{bytes / 1048576.0:F1} MB";
     private static Bitmap CreateTextBitmap(string text, int bgColor, int textColor, int sizeDp)
     {
         var density = Android.App.Application.Context.Resources!.DisplayMetrics!.Density;

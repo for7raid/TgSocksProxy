@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
+using System.ComponentModel.Design;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -22,14 +23,18 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
     private readonly ConcurrentDictionary<string, DnsCacheEntry> _dnsCache = new();
     private volatile bool _disposed;
     private volatile int _connectionCount;
+    private ulong _uploadBytes; //отправлено в интернет от клиента
+    private ulong _downloadBytes; //получено из интернета и передано клиенту
 
     public int ConnectionCount => _connectionCount;
+    public ulong UploadBytes => _uploadBytes;
+    public ulong DownloadBytes => _downloadBytes;
 
     /// <summary>Подключение установлено.</summary>
-    public event Action<SocksClientEventArgs>? ClientConnected;
+    public event Action<SocksProxy, SocksClientEventArgs>? ClientConnected;
 
     /// <summary>Подключение закрыто.</summary>
-    public event Action<SocksClientEventArgs>? ClientDisconnected;
+    public event Action<SocksProxy, SocksClientEventArgs>? ClientDisconnected;
 
     public SocksProxy(SocksProxyOptions options)
     {
@@ -137,7 +142,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             var count = _connectionCount;
             Options.Logger?.LogInformation("Connected {count} clients", count);
 
-            ClientConnected?.Invoke(new SocksClientEventArgs(target.Host, target.Port, clientEp?.Port ?? 0, count));
+            ClientConnected?.Invoke(this, new SocksClientEventArgs(target.Host, target.Port, clientEp?.Port ?? 0, count));
 
             // Шаг 4: Двунаправленная пересылка данных
             await RelayAsync(clientStream, upstreamStream, ct).ConfigureAwait(false);
@@ -146,7 +151,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             count = _connectionCount;
             Options.Logger?.LogInformation("Disconnected. Now {count} clients", count);
 
-            ClientDisconnected?.Invoke(new SocksClientEventArgs(target.Host, target.Port, clientEp?.Port ?? 0, count));
+            ClientDisconnected?.Invoke(this, new SocksClientEventArgs(target.Host, target.Port, clientEp?.Port ?? 0, count));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -547,12 +552,12 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
 
     // ── Двунаправленная пересылка данных ─────────────────────────────
 
-    private static async Task RelayAsync(Stream client, Stream upstream, CancellationToken ct)
+    private async Task RelayAsync(Stream client, Stream upstream, CancellationToken ct)
     {
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        var t1 = CopyAsync(client, upstream, linkedCts);
-        var t2 = CopyAsync(upstream, client, linkedCts);
+        var t1 = CopyAsync(client, upstream, Direction.Upload, linkedCts);
+        var t2 = CopyAsync(upstream, client, Direction.Download, linkedCts);
 
         var completed = await Task.WhenAny(t1, t2).ConfigureAwait(false);
 
@@ -562,7 +567,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
         try { await (completed == t1 ? t2 : t1).ConfigureAwait(false); } catch { }
     }
 
-    private static async Task CopyAsync(Stream from, Stream to, CancellationTokenSource linkedCts)
+    private async Task CopyAsync(Stream from, Stream to, Direction direction, CancellationTokenSource linkedCts)
     {
         var buffer = new byte[8192];
         try
@@ -571,6 +576,16 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             {
                 int read = await from.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
                 if (read == 0) break;
+
+                if (direction == Direction.Upload)
+                {
+                    Interlocked.Add(ref _uploadBytes, (ulong)read);
+                }
+                else
+                {
+                    Interlocked.Add(ref _downloadBytes, (ulong)read);
+
+                }
 
                 await to.WriteAsync(buffer.AsMemory(0, read), linkedCts.Token).ConfigureAwait(false);
             }
@@ -653,3 +668,9 @@ public sealed record SocksClientEventArgs(string Host, int Port, int ClientPort,
 
 /// <summary>Запись в DNS-кэше.</summary>
 internal readonly record struct DnsCacheEntry(IPAddress[] Addresses, DateTime Expiry);
+
+internal enum Direction
+{
+    Upload,
+    Download
+}
