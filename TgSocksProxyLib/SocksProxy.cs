@@ -347,7 +347,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
         Func<IPAddress[], IPAddress[]> cacheAndReturn = (addresses) =>
         {
             _dnsCache[host] = new DnsCacheEntry(addresses, DateTime.UtcNow.Add(Options.DnsCacheTtl));
-            return addresses;
+            return addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetworkV6).ToArray();
         };
 
         // Попытка 1–3: системный DNS (IPv4 only), с retry и backoff
@@ -357,7 +357,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             if (i > 0) await Task.Delay(delays[i], ct).ConfigureAwait(false);
             try
             {
-                var addresses = await Dns.GetHostAddressesAsync(host, AddressFamily.InterNetwork, ct)
+                var addresses = await Dns.GetHostAddressesAsync(host, AddressFamily.Unspecified, ct)
                     .ConfigureAwait(false);
                 if (addresses.Length > 0)
                 {
@@ -467,6 +467,8 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             try
             {
                 await upstream.ConnectAsync(new IPEndPoint(addr, upstreamPort), ct).ConfigureAwait(false);
+                Options.Logger?.LogInformation("Connected proxy to {Address}", addr);
+
                 break;
             }
             catch (SocketException ex) when (addr != addresses.Last())

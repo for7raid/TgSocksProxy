@@ -1,0 +1,66 @@
+name: .NET Android Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия релиза (например 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write # нужно для создания Release и загрузки APK
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # ── Установка Android workload ──
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Restore dependencies
+        run: dotnet restore TgSocksProxy/TgSocksProxy.csproj
+
+      - name: Build Android APK
+        run: >
+          dotnet publish TgSocksProxy/TgSocksProxy.csproj
+          -c Release
+          -f net10.0-android
+          /p:ApplicationVersion=${{ github.event.inputs.version }}
+          /p:ApplicationDisplayVersion=${{ github.event.inputs.version }}
+
+      # ── Поиск APK-файла ──
+      - name: Find APK
+        id: find-apk
+        run: |
+          APK=$(find TgSocksProxy/bin/Release -name "*.apk" | head -1)
+          echo "apk_path=$APK" >> $GITHUB_OUTPUT
+          echo "apk_name=$(basename "$APK")" >> $GITHUB_OUTPUT
+
+      # ── Создание GitHub Release и загрузка APK ──
+      - name: Create Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: v${{ github.event.inputs.version }}
+          body: |
+            ## 📱 CameraRecorder Android APK
+
+            - **Версия:** ${{ github.event.inputs.version }}
+            - **Сборка:** ${{ github.sha }}
+            - **Дата:** ${{ github.event.repository.updated_at }}
+
+            Установите APK на Android-устройство с API 24+.
+          files: ${{ steps.find-apk.outputs.apk_path }}
+          draft: false
+          prerelease: false
+          make_latest: true
