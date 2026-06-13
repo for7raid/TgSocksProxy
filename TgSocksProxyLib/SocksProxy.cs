@@ -347,7 +347,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
         Func<IPAddress[], IPAddress[]> cacheAndReturn = (addresses) =>
         {
             _dnsCache[host] = new DnsCacheEntry(addresses, DateTime.UtcNow.Add(Options.DnsCacheTtl));
-            return addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetworkV6).ToArray();
+            return addresses.OrderByDescending(a => a.AddressFamily == AddressFamily.InterNetworkV6 ? 1 : 0).ToArray();
         };
 
         // Попытка 1–3: системный DNS (IPv4 only), с retry и backoff
@@ -493,9 +493,12 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             upstreamStream = sslStream;
         }
 
-        // Формируем запрос CONNECT
-        string connectRequest = $"CONNECT {targetHost}:{targetPort} HTTP/1.1\r\n" +
-                                $"Host: {targetHost}:{targetPort}\r\n";
+        // Формируем запрос CONNECT (IPv6 адреса в квадратных скобках)
+        string formattedTarget = IPAddress.TryParse(targetHost, out var ip) && ip.AddressFamily == AddressFamily.InterNetworkV6
+            ? $"[{targetHost}]:{targetPort}"
+            : $"{targetHost}:{targetPort}";
+        string connectRequest = $"CONNECT {formattedTarget} HTTP/1.1\r\n" +
+                                $"Host: {formattedTarget}\r\n";
 
         if (Options.UpstreamCredentials is not null)
         {
@@ -532,9 +535,9 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
                     return upstreamStream;
                 }
 
-                Options.Logger?.LogWarning("Upstream proxy rejected CONNECT: {StatusLine}", response.Split('\r', '\n')[0]);
+                Options.Logger?.LogWarning("Upstream proxy rejected CONNECT: {StatusLine}, {connectRequest}", response.Split('\r', '\n')[0], connectRequest);
                 upstreamStream.Dispose();
-                throw new InvalidOperationException($"Upstream proxy CONNECT failed: {response.Split('\r', '\n')[0]}");
+                throw new InvalidOperationException($"Upstream proxy CONNECT failed: {response.Split('\r', '\n')[0]}, requets: {connectRequest}");
             }
         }
 

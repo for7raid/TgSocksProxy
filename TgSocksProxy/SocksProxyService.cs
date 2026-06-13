@@ -18,6 +18,8 @@ public class SocksProxyService : Service
     private static bool _isRunning;
     private SocksProxy? _proxy;
     private ILoggerFactory? _loggerFactory;
+    private Handler? _mainHandler;
+    private readonly ILogger<SocksProxyService> _logger;
 
     public static bool IsRunning
     {
@@ -32,10 +34,16 @@ public class SocksProxyService : Service
 
     public static event EventHandler? StatusChanged;
 
+    public SocksProxyService()
+    {
+        _logger = LoggerFactoryService.LoggerFactoryInstance.CreateLogger<SocksProxyService>();
+    }
     public override void OnCreate()
     {
         base.OnCreate();
+        _mainHandler = new Handler(Looper.MainLooper!);
         CreateNotificationChannel();
+        _logger.LogInformation("SocksProxyService created");
     }
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -55,6 +63,8 @@ public class SocksProxyService : Service
         _proxy?.Dispose();
         _loggerFactory?.Dispose();
         base.OnDestroy();
+        _logger.LogInformation("SocksProxyService destroyed");
+
     }
 
     public override IBinder? OnBind(Intent? intent) => null;
@@ -67,33 +77,12 @@ public class SocksProxyService : Service
         var primary = settings.Upstreams.FirstOrDefault(u => u.IsPrimary) ?? settings.Upstreams.FirstOrDefault();
         if (primary is null)
         {
-            LogStore.Add("[SocksProxyService] No upstream configured!");
+            _logger.LogError("No upstream configured!");
             return;
         }
 
-        string logsDir = System.IO.Path.Combine(CacheDir!.AbsolutePath, "logs");
-        Directory.CreateDirectory(logsDir);
 
-        var log = new LoggerConfiguration()
-               //.WriteTo.File(
-               //    path: System.IO.Path.Combine(logsDir, "log.txt"),
-               //    rollingInterval: RollingInterval.Day,
-               //    rollOnFileSizeLimit: true,
-               //    fileSizeLimitBytes: 1_048_576,
-               //    buffered: true,
-               //    flushToDiskInterval: TimeSpan.FromSeconds(3))
-               .WriteTo.Sink(new LogStoreSink())
-               .CreateLogger();
-
-        _loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddSerilog(log);
-            builder.AddDebug();
-        });
-
-        var logger = _loggerFactory!.CreateLogger<SocksProxy>();
-        var packageManager = PackageManager!;
-
+       
         var socksCredentials = settings.SocksLogin is not null
             ? new ProxyCredentials(settings.SocksLogin, settings.SocksPassword ?? "")
             : null;
@@ -111,18 +100,12 @@ public class SocksProxyService : Service
             UpstreamCredentials = upstreamCredentials,
             UseTls = true,
 
-            Logger = logger,
+            Logger = LoggerFactoryService.LoggerFactoryInstance.CreateLogger<SocksProxy>(),
         });
 
-        _proxy.ClientConnected += e =>
-        {
-            UpdateNotify();
-        };
-
-        _proxy.ClientDisconnected += e =>
-        {
-            UpdateNotify();
-        };
+        // События из фонового потока — переключаем на главный поток через Handler
+        _proxy.ClientConnected += _ => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
+        _proxy.ClientDisconnected += _ => { try { _mainHandler?.Post(UpdateNotify); } catch { } };
 
         _proxy.Start();
         IsRunning = true;
@@ -146,7 +129,6 @@ public class SocksProxyService : Service
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
         {
             var manager = (NotificationManager?)GetSystemService(NotificationService);
-
             manager?.Notify(NotificationId, BuildNotification());
         }
     }
@@ -173,19 +155,18 @@ public class SocksProxyService : Service
             .Build();
     }
 
-    private static Android.Graphics.Bitmap CreateTextBitmap(
-    string text, int bgColor, int textColor, int sizeDp)
+    private static Bitmap CreateTextBitmap(string text, int bgColor, int textColor, int sizeDp)
     {
         var density = Android.App.Application.Context.Resources!.DisplayMetrics!.Density;
         int px = (int)(sizeDp * density);
-        var bitmap = Android.Graphics.Bitmap.CreateBitmap(px, px, Android.Graphics.Bitmap.Config.Argb8888!)!;
-        var canvas = new Android.Graphics.Canvas(bitmap);
-        var paint = new Android.Graphics.Paint
+        var bitmap = Bitmap.CreateBitmap(px, px, Bitmap.Config.Argb8888!)!;
+        var canvas = new Canvas(bitmap);
+        var paint = new Paint
         {
             Color = new Android.Graphics.Color(textColor),
             TextSize = px * 0.6f,
             AntiAlias = true,
-            TextAlign = Android.Graphics.Paint.Align.Center
+            TextAlign = Paint.Align.Center
         };
         canvas.DrawColor(new Android.Graphics.Color(bgColor));
         canvas.DrawText(text, px / 2f, px * 0.75f, paint);
