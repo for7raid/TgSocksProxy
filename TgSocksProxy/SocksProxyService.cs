@@ -75,13 +75,13 @@ public class SocksProxyService : Service
         Directory.CreateDirectory(logsDir);
 
         var log = new LoggerConfiguration()
-               .WriteTo.File(
-                   path: System.IO.Path.Combine(logsDir, "log.txt"),
-                   rollingInterval: RollingInterval.Day,
-                   rollOnFileSizeLimit: true,
-                   fileSizeLimitBytes: 1_048_576,
-                   buffered: true,
-                   flushToDiskInterval: TimeSpan.FromSeconds(3))
+               //.WriteTo.File(
+               //    path: System.IO.Path.Combine(logsDir, "log.txt"),
+               //    rollingInterval: RollingInterval.Day,
+               //    rollOnFileSizeLimit: true,
+               //    fileSizeLimitBytes: 1_048_576,
+               //    buffered: true,
+               //    flushToDiskInterval: TimeSpan.FromSeconds(3))
                .WriteTo.Sink(new LogStoreSink())
                .CreateLogger();
 
@@ -165,8 +165,8 @@ public class SocksProxyService : Service
 
         return new Notification.Builder(this, ChannelId)
             .SetContentTitle("Socks5 Proxy")
-            .SetContentText($"Сервер {primaryUpstream?.Host}:{primaryUpstream?.Port}")
-            .SetSubText($"{count} соединений")
+            .SetContentText($"РЎРµСЂРІРµСЂ {primaryUpstream?.Host}:{primaryUpstream?.Port}")
+            .SetSubText($"{count} СЃРѕРµРґРёРЅРµРЅРёР№")
             .SetSmallIcon(icon)
             .SetContentIntent(pendingIntent)
             .SetOngoing(true)
