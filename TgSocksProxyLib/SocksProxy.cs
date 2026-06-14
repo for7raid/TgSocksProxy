@@ -351,8 +351,9 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
 
         Func<IPAddress[], IPAddress[]> cacheAndReturn = (addresses) =>
         {
-            _dnsCache[host] = new DnsCacheEntry(addresses, DateTime.UtcNow.Add(Options.DnsCacheTtl));
-            return addresses.OrderByDescending(a => a.AddressFamily == AddressFamily.InterNetworkV6 ? 1 : 0).ToArray();
+            var items = addresses.OrderByDescending(a => a.AddressFamily == AddressFamily.InterNetworkV6 ? 1 : 0).ToArray();
+            _dnsCache[host] = new DnsCacheEntry(items, DateTime.UtcNow.Add(Options.DnsCacheTtl));
+            return items;
         };
 
         // Попытка 1–3: системный DNS (IPv4 only), с retry и backoff

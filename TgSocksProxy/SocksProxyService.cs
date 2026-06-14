@@ -4,7 +4,6 @@ using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.OS;
 using Microsoft.Extensions.Logging;
-using Serilog;
 using System.Net;
 
 namespace TgSocksProxy;
@@ -17,7 +16,6 @@ public class SocksProxyService : Service
 
     private static bool _isRunning;
     private SocksProxy? _proxy;
-    private ILoggerFactory? _loggerFactory;
     private Handler? _mainHandler;
     private readonly ILogger<SocksProxyService> _logger;
 
@@ -49,7 +47,7 @@ public class SocksProxyService : Service
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         var notification = BuildNotification();
-        StartForeground(NotificationId, notification);
+        StartForeground(NotificationId, notification, ForegroundService.TypeSpecialUse);
 
         StartProxy();
 
@@ -61,7 +59,6 @@ public class SocksProxyService : Service
         IsRunning = false;
         _proxy?.Stop();
         _proxy?.Dispose();
-        _loggerFactory?.Dispose();
         base.OnDestroy();
         _logger.LogInformation("SocksProxyService destroyed");
 
@@ -113,24 +110,22 @@ public class SocksProxyService : Service
 
     private void CreateNotificationChannel()
     {
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
-        {
-            var channel = new NotificationChannel(
-                ChannelId,
-                "Socks5 Proxy",
-                NotificationImportance.Low);
-            var manager = (NotificationManager?)GetSystemService(NotificationService);
-            manager?.CreateNotificationChannel(channel);
-        }
+
+        var channel = new NotificationChannel(
+            ChannelId,
+            "Socks5 Proxy",
+            NotificationImportance.Low);
+        var manager = (NotificationManager?)GetSystemService(NotificationService);
+        manager?.CreateNotificationChannel(channel);
+
     }
 
     private void UpdateNotify()
     {
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
-        {
-            var manager = (NotificationManager?)GetSystemService(NotificationService);
-            manager?.Notify(NotificationId, BuildNotification());
-        }
+
+        var manager = (NotificationManager?)GetSystemService(NotificationService);
+        manager?.Notify(NotificationId, BuildNotification());
+
     }
 
     private Notification BuildNotification()
