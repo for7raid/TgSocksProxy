@@ -6,7 +6,8 @@ public sealed record UpstreamSettings(
     int Port,
     string? Login,
     string? Password,
-    bool IsPrimary = false);
+    string SNIs,
+    bool Enabled = true);
 
 /// <summary>Полные настройки Socks5-прокси.</summary>
 public sealed record ProxySettings(

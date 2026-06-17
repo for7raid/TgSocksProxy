@@ -53,18 +53,8 @@ public class SettingsActivity : Activity
                 _layoutUpstreams!.RemoveView(_upstreamRows[idx].Root);
                 _upstreamRows.RemoveAt(idx);
             }
-        },
-        () =>
-        {
-            // При выборе Primary — снимаем со всех остальных
-            foreach (var r in _upstreamRows)
-                if (!ReferenceEquals(r, row!))
-                    r.SetPrimary(false);
         });
 
-        // Если ни у одного не стоит Primary и это первый — ставим
-        if (existing is null && !_upstreamRows.Any(r => r.IsPrimary))
-            row.SetPrimary(true);
 
         _upstreamRows.Add(row);
         _layoutUpstreams!.AddView(row.Root);
@@ -89,8 +79,8 @@ public class SettingsActivity : Activity
             return;
         }
 
-        if (!upstreams.Any(u => u.IsPrimary))
-            upstreams[0] = upstreams[0] with { IsPrimary = true };
+        if (!upstreams.Any(u => u.Enabled))
+            upstreams[0] = upstreams[0] with { Enabled = true };
 
         var socksLogin = _etSocksLogin!.Text;
         var socksPassword = _etSocksPassword!.Text;
@@ -113,17 +103,18 @@ public class SettingsActivity : Activity
     private sealed class UpstreamRow
     {
         public View Root { get; }
-        public bool IsPrimary => _rbPrimary.Checked;
+
 
         private readonly EditText _etHost;
         private readonly EditText _etPort;
         private readonly EditText _etLogin;
         private readonly EditText _etPassword;
-        private readonly RadioButton _rbPrimary;
+        private readonly EditText _etSNIs;
+        private readonly CheckBox _chEnabled;
 
-        public void SetPrimary(bool value) => _rbPrimary.Checked = value;
+        public void SetPrimary(bool value) => _chEnabled.Checked = value;
 
-        public UpstreamRow(Context ctx, UpstreamSettings? existing, Action onRemove, Action onPrimarySelected)
+        public UpstreamRow(Context ctx, UpstreamSettings? existing, Action onRemove)
         {
             var density = ctx.Resources?.DisplayMetrics?.Density ?? 1f;
             int dp8 = (int)(8 * density);
@@ -141,17 +132,12 @@ public class SettingsActivity : Activity
 
             var headerRow = new LinearLayout(ctx) { Orientation = Orientation.Horizontal };
 
-            _rbPrimary = new RadioButton(ctx)
+            _chEnabled = new CheckBox(ctx)
             {
-                Text = "Primary",
-                Checked = existing?.IsPrimary ?? false
+                Text = "Enabled",
+                Checked = existing?.Enabled ?? false
             };
-            _rbPrimary.CheckedChange += (_, args) =>
-            {
-                if (args.IsChecked)
-                    onPrimarySelected();
-            };
-            headerRow.AddView(_rbPrimary);
+            headerRow.AddView(_chEnabled);
 
             var btnRemove = new Button(ctx) { Text = "Remove" };
             btnRemove.Click += (_, _) => onRemove();
@@ -198,6 +184,26 @@ public class SettingsActivity : Activity
             row2.AddView(_etPassword);
             container.AddView(row2);
 
+            var labelSNI = new Android.Widget.TextView(ctx)
+            {
+                Text = "SNI (one per line)",
+                TextSize = 12f
+            };
+            container.AddView(labelSNI);
+
+            _etSNIs = new EditText(ctx)
+            {
+                LayoutParameters = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent),
+                Hint = @"*\.example.com\n*.example.org",
+                InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagMultiLine,
+                Gravity = Android.Views.GravityFlags.Top | Android.Views.GravityFlags.Start,
+                Text = existing?.SNIs ?? ""
+            };
+            _etSNIs.SetMinLines(3);
+            _etSNIs.SetMaxLines(6);
+            container.AddView(_etSNIs);
+
             Root = container;
         }
 
@@ -209,7 +215,8 @@ public class SettingsActivity : Activity
                 Port: port > 0 ? port : 443,
                 Login: string.IsNullOrEmpty(_etLogin.Text) ? null : _etLogin.Text,
                 Password: string.IsNullOrEmpty(_etPassword.Text) ? null : _etPassword.Text,
-                IsPrimary: _rbPrimary.Checked);
+                SNIs: _etSNIs.Text.Trim(),
+                Enabled: _chEnabled.Checked);
         }
     }
 }

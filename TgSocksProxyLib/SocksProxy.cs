@@ -458,8 +458,12 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
     /// </summary>
     private async Task<Stream> ConnectViaHttpsProxyAsync(string targetHost, ushort targetPort, CancellationToken ct)
     {
-        var upstreamHost = Options.UpstreamProxyEndPoint.Host;
-        var upstreamPort = Options.UpstreamProxyEndPoint.Port;
+        var randomUpstreamCnt = new Random().Next(0, Options.ProxyUpstreams.Count);
+        var proxyUpstream = Options.ProxyUpstreams[randomUpstreamCnt];
+
+        var upstreamHost = proxyUpstream.EndPoint.Host;
+        var upstreamPort = proxyUpstream.EndPoint.Port;
+        var upstreamSNI = proxyUpstream.SNIs?.Count > 0 ? proxyUpstream.SNIs[Random.Shared.Next(0, proxyUpstream.SNIs.Count)] : upstreamHost;
 
         IPAddress[] addresses = await ResolveUpstreamHostAsync(upstreamHost, ct).ConfigureAwait(false);
 
@@ -473,7 +477,7 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
             try
             {
                 await upstream.ConnectAsync(new IPEndPoint(addr, upstreamPort), ct).ConfigureAwait(false);
-                Options.Logger?.LogInformation("Connected proxy to {Address}", addr);
+                Options.Logger?.LogInformation("Connected proxy to {Address} with SNI {sni}", addr, upstreamSNI);
 
                 break;
             }
@@ -491,11 +495,11 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
 
         // Оборачиваем в TLS, если включено
         Stream upstreamStream = new NetworkStream(upstream, ownsSocket: true);
-        if (Options.UseTls)
+        if (proxyUpstream.UseTls)
         {
             var sslStream = new SslStream(upstreamStream, leaveInnerStreamOpen: false,
                 userCertificateValidationCallback: (_, _, _, _) => true);
-            await sslStream.AuthenticateAsClientAsync(upstreamHost).ConfigureAwait(false);
+            await sslStream.AuthenticateAsClientAsync(upstreamSNI).ConfigureAwait(false);
             upstreamStream = sslStream;
         }
 
@@ -506,10 +510,10 @@ public sealed class SocksProxy : IDisposable, IAsyncDisposable
         string connectRequest = $"CONNECT {formattedTarget} HTTP/1.1\r\n" +
                                 $"Host: {formattedTarget}\r\n";
 
-        if (Options.UpstreamCredentials is not null)
+        if (proxyUpstream.UpstreamCredentials is not null)
         {
             string credential = Convert.ToBase64String(
-                Encoding.UTF8.GetBytes($"{Options.UpstreamCredentials.Username}:{Options.UpstreamCredentials.Password}"));
+                Encoding.UTF8.GetBytes($"{proxyUpstream.UpstreamCredentials.Username}:{proxyUpstream.UpstreamCredentials.Password}"));
             connectRequest += $"Proxy-Authorization: Basic {credential}\r\n";
         }
 
@@ -623,8 +627,10 @@ public sealed class SocksProxyOptions
     /// <summary>Локальный endpoint, на котором будет слушать Socks5-сервер.</summary>
     public IPEndPoint LocalEndPoint { get; set; } = new(IPAddress.Loopback, 1080);
 
+    public IList<ProxyUpstream>? ProxyUpstreams { get; init; }
+
     /// <summary>Endpoint вышестоящего HTTPS-прокси (домен/хост + порт).</summary>
-    public DnsEndPoint UpstreamProxyEndPoint { get; set; } = new("localhost", 8080);
+    //public DnsEndPoint UpstreamProxyEndPoint { get; set; } = new("localhost", 8080);
 
     /// <summary>Максимальная очередь ожидающих подключений.</summary>
     public int Backlog { get; set; } = 100;
@@ -637,7 +643,7 @@ public sealed class SocksProxyOptions
     /// <summary>
     /// Учётные данные для аутентификации на upstream HTTPS-прокси (null = не требуется).
     /// </summary>
-    public ProxyCredentials? UpstreamCredentials { get; set; }
+    //public ProxyCredentials? UpstreamCredentials { get; set; }
 
     /// <summary>Логгер Microsoft.Extensions.Logging (null = без логирования).</summary>
     public ILogger? Logger { get; set; }
@@ -645,7 +651,7 @@ public sealed class SocksProxyOptions
     /// <summary>
     /// Использовать TLS к upstream прокси (для HTTPS-прокси на 443 порту).
     /// </summary>
-    public bool UseTls { get; set; }
+    //public bool UseTls { get; set; }
 
     /// <summary>Время жизни DNS-кэша. По умолчанию 5 минут.</summary>
     public TimeSpan DnsCacheTtl { get; set; } = TimeSpan.FromMinutes(5);
@@ -653,7 +659,7 @@ public sealed class SocksProxyOptions
     public void Validate()
     {
         ArgumentNullException.ThrowIfNull(LocalEndPoint);
-        ArgumentNullException.ThrowIfNull(UpstreamProxyEndPoint);
+        ArgumentNullException.ThrowIfNull(ProxyUpstreams);
         if (Backlog < 1) throw new ArgumentException("Backlog must be at least 1");
     }
 }
@@ -663,6 +669,7 @@ public sealed record ProxyCredentials(string Username, string Password);
 
 /// <summary>Адрес цели, запрошенной Socks5-клиентом.</summary>
 internal sealed record Socks5Target(string Host, ushort Port);
+public sealed record ProxyUpstream(DnsEndPoint EndPoint, IList<string> SNIs, bool UseTls, ProxyCredentials? UpstreamCredentials);
 
 /// <summary>Аргументы событий подключения/отключения.</summary>
 public sealed record SocksClientEventArgs(string Host, int Port, int ClientPort, int ConnectionCount);

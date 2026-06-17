@@ -13,10 +13,10 @@ var loggerFactory = LoggerFactory.Create(builder =>
 
 var proxy = new SocksProxy(new SocksProxyOptions
 {
-    LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 10180),
-    UpstreamProxyEndPoint = new DnsEndPoint("", 443),
-    UpstreamCredentials = new ProxyCredentials("", ""),
-    UseTls = true,
+    //LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 10180),
+    //UpstreamProxyEndPoint = new DnsEndPoint("", 443),
+    //UpstreamCredentials = new ProxyCredentials("", ""),
+    //UseTls = true,
     Logger = loggerFactory.CreateLogger<SocksProxy>()
 });
 

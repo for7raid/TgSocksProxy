@@ -71,12 +71,7 @@ public class SocksProxyService : Service
         if (_proxy is not null) return;
 
         var settings = ProxySettingsProvider.Get();
-        var primary = settings.Upstreams.FirstOrDefault(u => u.IsPrimary) ?? settings.Upstreams.FirstOrDefault();
-        if (primary is null)
-        {
-            _logger.LogError("No upstream configured!");
-            return;
-        }
+
 
 
 
@@ -84,18 +79,21 @@ public class SocksProxyService : Service
             ? new ProxyCredentials(settings.SocksLogin, settings.SocksPassword ?? "")
             : null;
 
-        var upstreamCredentials = primary.Login is not null
-            ? new ProxyCredentials(primary.Login, primary.Password ?? "")
-            : null;
-
         _proxy = new SocksProxy(new SocksProxyOptions
         {
             LocalEndPoint = new IPEndPoint(IPAddress.Loopback, settings.LocalPort),
             Credentials = socksCredentials,
 
-            UpstreamProxyEndPoint = new DnsEndPoint(primary.Host, primary.Port),
-            UpstreamCredentials = upstreamCredentials,
-            UseTls = true,
+            ProxyUpstreams = settings.Upstreams.Where(u => u.Enabled).Select(u => new ProxyUpstream
+            (
+                EndPoint: new DnsEndPoint(u.Host, u.Port),
+                SNIs: string.IsNullOrEmpty(u.SNIs)
+                    ? new List<string>()
+                    : u.SNIs.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => s.Trim()).Where(s => s.Length > 0).ToList(),
+                UseTls: true,
+                UpstreamCredentials: u.Login is not null ? new ProxyCredentials(u.Login, u.Password ?? "") : null
+            )).ToList(),
 
             Logger = LoggerFactoryService.LoggerFactoryInstance.CreateLogger<SocksProxy>(),
         });
@@ -135,13 +133,13 @@ public class SocksProxyService : Service
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
         var count = _proxy?.ConnectionCount ?? 0;
-        var primaryUpstream = _proxy?.Options?.UpstreamProxyEndPoint;
+
         var textBitmap = CreateTextBitmap($"{count}↕", Color.Transparent.ToArgb(), Color.White.ToArgb(), 60);
 
         var icon = Icon.CreateWithBitmap(textBitmap);
 
         return new Notification.Builder(this, ChannelId)
-            .SetContentTitle($"Сервер {primaryUpstream?.Host}:{primaryUpstream?.Port}")
+            //.SetContentTitle($"Сервер {primaryUpstream?.Host}:{primaryUpstream?.Port}")
             .SetContentText($"↑{FormatSize(_proxy?.UploadBytes ?? 0)}\t\t↓{FormatSize(_proxy?.DownloadBytes ?? 0)}")
             .SetSubText($"{count} соединений")
             .SetSmallIcon(icon)
