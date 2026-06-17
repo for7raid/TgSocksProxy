@@ -8,7 +8,7 @@ using System.Net;
 
 namespace TgSocksProxy;
 
-[Service(ForegroundServiceType = ForegroundService.TypeSpecialUse)]
+[Service(ForegroundServiceType = ForegroundService.TypeSystemExempted)]
 public class SocksProxyService : Service
 {
     private const string ChannelId = "socks_proxy_channel";
@@ -47,7 +47,7 @@ public class SocksProxyService : Service
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         var notification = BuildNotification();
-        StartForeground(NotificationId, notification, ForegroundService.TypeSpecialUse);
+        StartForeground(NotificationId, notification, ForegroundService.TypeSystemExempted);
 
         StartProxy();
 
